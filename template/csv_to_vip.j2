@@ -1,0 +1,15 @@
+{% if reference_prompt is defined %}
+
+  - name: '{{ csvfile.list.0.VIP_Name }}'
+    vip_destination: "{{ csvfile.list.0.VIP_IP }}"
+    vip_pool: "{{ csvfile.list.0.VIP_Pool }}"
+    vip_port: "{{ csvfile.list.0.VIP_Port }}"
+    vip_snat: "Automap"
+    vip_all_profiles:
+      - "tcp-lan-optimized"
+      - "clientssl"
+      - "http"
+      - "analytics"
+    state: present
+    activation: enabled
+{% endif %}

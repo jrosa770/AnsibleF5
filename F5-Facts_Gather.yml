@@ -1,0 +1,78 @@
+---
+- hosts: f5
+  gather_facts: yes
+  connection: local
+  become: yes
+  become_method: enable
+  ignore_errors: no
+
+  tasks:
+  - name: new variable with current date time
+    set_fact: time_stamp="{{lookup('pipe','date \"+%m-%d-%Y_%H%M\"')}}"
+
+  - name: account $USER
+    shell: "echo $USER"
+    register: play_user
+    changed_when: false
+    check_mode: no
+
+  - name: Set reference var
+    set_fact:
+      reference: "{{ time_stamp }}_{{ play_user.stdout }}"
+
+  - debug:
+      msg: "Running as '{{ play_user.stdout }}'"
+
+  - name: obtain login credentials
+    include_vars: "auth/secrets.yml"
+
+  - name: Load Target F5 Variable File
+    include_vars: vars/hostvars/{{ inventory_hostname }}.yml
+
+  - name: Set Username and Password for provider
+    set_fact:
+      provider:
+        server: "{{ f5.ipv4 }}"
+        user: "{{ f5_creds['username'] }}"
+        password: "{{ f5_creds['password'] }}"
+        transport: rest
+        server_port: 443
+        validate_certs: no
+
+  - name: Collect all BIG-IP facts
+    bigip_device_facts:
+      provider: "{{ provider }}"
+      gather_subset:
+        - all
+    delegate_to: localhost
+    register: f5_all_facts
+
+  - name: Generate Output File
+    template:
+      src=template/facts_output.j2
+      dest=output/fact_output/F5-All-Facts-{{ time_stamp }}-{{ f5.hostname }}_{{ reference }}.yml
+
+  - name: Email Report Recipient(s).
+    pause:
+      prompt: "Email Playbook Report? (y/n)"
+      echo: yes
+    register: mail_prompt
+
+  - name: Email Report Recipient(s).
+    pause:
+      prompt: "Target Email Address(es). Separate multiple addresses by commas"
+      echo: yes
+    register: mail_recipient
+    when: (mail_prompt.user_input == "y")
+
+  - name: Sending Playbook Build Output File
+    mail:
+      host: 10.0.0.1
+      port: 25
+      from: ansible-do-not-reply@example.com
+      subject: F5-Build_Report_{{ inventory_hostname }}
+      body: "See atached report"
+      attach: "output/fact_output/F5-All-Facts-{{ time_stamp }}-{{ f5.hostname }}_{{ reference }}.yml"
+      to: "{{ mail_recipient }}"
+    when: (mail_prompt.user_input == "y") and
+          (mail_recipient.user_input is defined)

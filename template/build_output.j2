@@ -1,0 +1,20 @@
+# Build ID
+{{ reference_prompt }}
+
+# Playbook Initiator
+{{ play_user.stdout }}
+
+# Virtual Server Build
+{{ result_vs_build | to_nice_yaml }}
+
+# Node Pool Build
+{{ result_pool_build | to_nice_yaml }}
+
+# Pool Node Build
+{{ result_node_build | to_nice_yaml }}
+
+# Add Node to Pool
+{{ result_node_pool_add | to_nice_yaml }}
+
+# Add Pool to VS
+{{ result_vs_update | to_nice_yaml }}

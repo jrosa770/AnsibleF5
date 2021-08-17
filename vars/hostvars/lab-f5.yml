@@ -1,0 +1,52 @@
+---
+f5:
+  hostname: 'lab-f5'
+  location_domain_name: "example.com"
+  ipv4: 10.100.1.10
+  mask: 255.255.255.0
+  gw: 10.100.1.1
+
+bigip_virtual_servers:
+  - name: "lab-vip-10.1.1.11"
+    vip_destination: "10.1.1.11"
+    vip_pool: "lab-pool_Web-01"
+    vip_port: "443"
+    vip_snat: "Automap"
+    vip_all_profiles:
+      - "tcp-lan-optimized"
+      - "clientssl"
+      - "http"
+      - "analytics"
+    state: ignore
+    activation: ignore
+big_ip_pools:
+  - name: "lab-pool_Web-01"
+    pool_monitors: "/Common/http"
+    pool_monitor_type: "and_list"
+    pool_slow_ramp_time: "120"
+    pool_lb_method: "ratio-member"
+    state: ignore
+    activation: ignore
+big_ip_nodes:
+  - name: mytestserver110
+    node_ip: 10.1.2.110
+    node_port: 443
+    node_pool_membership: "lab-pool_Web-01"
+    state: ignore
+    activation: ignore
+
+  - name: mytestserve111
+    node_ip: 10.1.2.111
+    node_port: 443
+    node_pool_membership: "lab-pool_Web-01"
+    state: ignore
+    activation: ignore
+
+  - name: mytestserver74
+    node_ip: 10.200.1.112
+    node_port: 22
+    node_pool_membership: "lab-pool_SSH-01"
+    state: ignore
+    activation: ignore
+#EOF
+...

@@ -1,0 +1,2 @@
+---
+csv_extract: "{{ lookup('file', 'input/{{ reference }}.csv') }}"

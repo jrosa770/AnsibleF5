@@ -1,0 +1,219 @@
+---
+- hosts: f5
+  gather_facts: yes
+  connection: local
+  become: yes
+  become_method: enable
+  ignore_errors: no
+
+  vars_prompt:
+  - name: reference_prompt
+    prompt: "Request Ticket or Reference ID. (To be Used as Process ID)"
+    private: no
+
+  tasks:
+  - name: new variable with current date time
+    set_fact: time_stamp="{{lookup('pipe','date \"+%m-%d-%Y_%H%M\"')}}"
+
+  - name: account $USER
+    shell: "echo $USER"
+    register: play_user
+    changed_when: false
+    check_mode: no
+
+  - name: Set reference var
+    set_fact:
+      reference: "{{ reference_prompt }}_{{ play_user.stdout }}"
+
+  - debug:
+      msg: "Running as '{{ play_user.stdout }}'"
+
+  - name: obtain login credentials
+    include_vars: "auth/secrets.yml"
+
+  - name: Update {{ inventory_hostname }} from CSV Prompt
+    pause:
+      prompt: "CSV File Based Build? (y/n)"
+      echo: yes
+    register: csv_import
+
+  - debug:
+      msg: "Updating existing {{ inventory_hostname }}.yml"
+    when: (csv_import.user_input == "y")
+
+  - name: Update "{{ inventory_hostname }}" from CSV
+    include: include_task/csv_process_vars.yml
+    when: (csv_import.user_input == "y")
+
+  - name: Load Target F5 Variable File
+    include_vars: vars/hostvars/{{ inventory_hostname }}.yml
+
+  - name: Continue with F5 Build
+    pause:
+      prompt: "Continue with Build for {{ f5.hostname }}? (y/n)"
+      echo: yes
+    register: continue_build
+
+  - name: Set Username and Password for provider
+    set_fact:
+      provider:
+        server: "{{ f5.ipv4 }}"
+        user: "{{ f5_creds['username'] }}"
+        password: "{{ f5_creds['password'] }}"
+        transport: rest
+        server_port: 443
+        validate_certs: no
+
+  - name: BigIP Virtual Server
+    bigip_virtual_server:
+      provider: "{{ provider }}"
+      name: "{{ item.vip_name }}"
+      destination: "{{ item.vip_ip }}"
+      port:  "{{ item.vip_port }}"
+      description:  "{{ reference }}"
+      snat: "{{ item.vip_snat }}"
+      all_profiles: "{{ item.vip_all_profiles }}"
+      state: "{{ item.state }}"
+    delegate_to: localhost
+    register: result_vs_build
+    with_items:  
+      - "{{ bigip_virtual_servers }}"
+    when: (item.state == "present" or item.state == "absent") and
+          (continue_build.user_input == "y")
+
+  - name: BigIP Pool
+    bigip_pool:
+      provider: "{{ provider }}"
+      name: "{{ item.name }}"
+      monitors: "{{ item.pool_monitors }}"
+      monitor_type: "{{ item.pool_monitor_type }}"
+      slow_ramp_time: "{{ item.pool_slow_ramp_type }}"
+      lb_method: "{{ item.pool_b_method }}"
+      state: "{{ item.state }}"
+    delegate_to: localhost
+    register: result_pool_build
+    with_items: 
+      - "{{ big_ip_pools }}"
+    when: (item.state == "present" or item.state == "absent") and
+          (item.activation == "enabled" or item.activation == "disabled") and
+          (continue_build.user_input == "y")
+
+  - name: Big IP Node
+    bigip_node:
+      provider: "{{ provider }}"
+      name: "{{ item.name }}"
+      host: "{{ item.node_ip }}"
+      state: "{{ item.state }}"
+    with_items: "{{ big_ip_nodes }}"
+    delegate_to: localhost
+    register: result_node_build
+    when: (item.state == "present" or item.state == "absent") and
+          (continue_build.user_input == "y")
+
+  - name: Add nodes to pool
+    bigip_pool_member:
+      provider: "{{ provider }}"
+      name: "{{ item.name }}"
+      host: "{{ item.node_ip }}"
+      port: "{{ item.node_port }}"
+      pool: "{{ item.node_pool_membership }}"
+      state: "{{ item.state }}"
+    delegate_to: localhost
+    register: result_node_pool_add
+    with_items:
+      - "{{ big_ip_nodes }}"
+    when: (item.activation == "enabled") and
+          (continue_build.user_input == "y")
+
+  - name: Update a VS with a pool
+    bigip_virtual_server:
+      provider: "{{ provider }}"
+      name: "{{ service_name }}"
+      pool: "{{ item.vip_pool }}"
+      state: "{{ item.activation}}"
+    with_items:  
+      - "{{ bigip_virtual_servers }}"
+    delegate_to: localhost
+    register: result_vs_update
+    when: (item.activation == "enabled" or item.activation == "disabled") and
+          (continue_build.user_input == "y")
+
+  - name: Generate Output File
+    template:
+      src=template/build_output.j2
+      dest=output/build_output/F5-Build-Info-{{ time_stamp }}-{{ f5.hostname }}_{{ reference }}.yml
+
+  - name: Cleanup CSV File
+    file:
+      path: input/{{ reference }}.csv
+      state: absent
+
+  - name: Change current present states to ignore
+    replace:
+      path: vars/hostvars/{{ inventory_hostname }}.yml
+      regexp: 'state: present'
+      replace: 'state: ignore'
+      before: '#EOF'
+
+  - name: Change current absent states to ignore
+    replace:
+      path: vars/hostvars/{{ inventory_hostname }}.yml
+      regexp: 'state: absent'
+      replace: 'state: ignore'
+      before: '#EOF'
+
+  - name: Change current enable activations to ignore
+    replace:
+      path: vars/hostvars/{{ inventory_hostname }}.yml
+      regexp: 'activation: enabled'
+      replace: 'activation: ignore'
+      before: '#EOF'
+
+  - name: Change current disable activations to ignore
+    replace:
+      path: vars/hostvars/{{ inventory_hostname }}.yml
+      regexp: 'activation: disable'
+      replace: 'activation: ignore'
+      before: '#EOF'
+
+
+  - name: Email Report Recipient(s).
+    pause:
+      prompt: "Email Playbook Report? (y/n)"
+      echo: yes
+    register: mail_prompt
+
+  - name: Email Report Recipient(s).
+    pause:
+      prompt: "Target Email Address(es). Separate multiple addresses by commas"
+      echo: yes
+    register: mail_recipient
+    when: (mail_prompt.user_input == "y")
+
+  - name: Sending Playbook Build Output File
+    mail:
+      host: 10.0.0.1
+      port: 25
+      from: ansible-do-not-reply@example.com
+      subject: F5-Build_Report_{{ inventory_hostname }}
+      body: "See atached report"
+      attach: "output/build_output/F5-Build-Info-{{ time_stamp }}-{{ f5.hostname }}_{{ reference }}.yml"
+      to: "{{ mail_recipient }}"
+    when: (mail_prompt.user_input == "y") and
+          (mail_recipient.user_input is defined)
+
+  - name: Clean VIP YAML build Vars
+    file:
+      path: output/vips/F5-Info-Build-VIP-{{ reference }}.yml
+      state: absent
+
+  - name: Clean POOLS YAML build Vars
+    file:
+      path: output/pools/F5-Info-Build-Pool-{{ reference }}.yml
+      state: absent
+
+  - name: Clean NODES YAML build Vars
+    file:
+      path: output/nodes/F5-Info-Build-Node-{{ reference }}.yml
+      state: absent
+...

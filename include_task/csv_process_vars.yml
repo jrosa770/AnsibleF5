@@ -1,0 +1,77 @@
+- name: Copy file with owner and permissions
+  copy:
+    src: input/f5_build.csv
+    dest: input/{{ reference }}.csv
+    mode: '0666'
+
+- name: Load Playbook specific Variable File
+  include_vars: vars/playvars/csv.yml
+
+- name: Read CSV for VIP and Pool
+  read_csv:
+    path: input/{{ reference }}.csv
+  register: csvfile
+
+- name: new variable with current date time
+  set_fact: time_stamp="{{lookup('pipe','date \"+%m-%d-%Y_%H%M\"')}}"
+  
+- name: Generate VIP YAML build Vars
+  template:
+    src: template/csv_to_vip.j2
+    dest: output/vips/F5-Info-Build-VIP-{{ reference }}.yml
+
+- name: Generate Pool YAML build Vars
+  template:
+    src: template/csv_to_pool.j2
+    dest: output/pools/F5-Info-Build-Pool-{{ reference }}.yml
+
+- name: Generate Node YAML build Vars
+  template:
+    src: template/csv_to_node.j2
+    dest: output/nodes/F5-Info-Build-Node-{{ reference }}.yml
+
+- name: Create Hostvars Backup
+  copy:
+    src: vars/hostvars/{{ inventory_hostname }}.yml
+    dest: vars/hostvars/{{ inventory_hostname }}_{{ reference }}.yml
+    mode: preserve
+
+- name: Insert VIP Vars
+  blockinfile:
+    block: "{{ lookup('file', 'output/vips/F5-Info-Build-VIP-{{ reference }}.yml') }}"
+    dest: vars/hostvars/{{ inventory_hostname }}.yml
+    marker: "#{{ reference }}-VIP"
+    insertbefore: "big_ip_pools:"
+
+- name: Insert Pool Vars
+  blockinfile:
+    block: "{{ lookup('file', 'output/pools/F5-Info-Build-Pool-{{ reference }}.yml') }}"
+    dest: vars/hostvars/{{ inventory_hostname }}.yml
+    marker: "#{{ reference }}-POOL"
+    insertbefore: "big_ip_nodes:"
+
+- name: Insert Node Vars
+  blockinfile:
+    block: "{{ lookup('file', 'output/nodes/F5-Info-Build-Node-{{ reference }}.yml') }}"
+    dest: vars/hostvars/{{ inventory_hostname }}.yml
+    marker: "#{{ reference }}-NODE"
+    insertbefore: "#EOF"
+
+- name: Clean Block Marker-VIP
+  lineinfile:
+    path: vars/hostvars/{{ inventory_hostname }}.yml
+    regexp: '\#.*\-VIP'
+    state: absent
+
+- name: Clean Block Marker-POOL
+  lineinfile:
+    path: vars/hostvars/{{ inventory_hostname }}.yml
+    regexp: '\#.*\-POOL'
+    state: absent
+
+- name: Clean Block Marker-NODE
+  lineinfile:
+    path: vars/hostvars/{{ inventory_hostname }}.yml
+    regexp: '\#.*\-NODE'
+    state: absent
+...

@@ -1,0 +1,10 @@
+{% if reference_prompt is defined %}
+
+  - name: "{{ csvfile.list.0.VIP_Pool }}"
+    pool_monitors: "{{ csvfile.list.0.PoolMonitors }}"
+    pool_monitor_type: "{{ csvfile.list.0.PoolMonitorsType }}"
+    pool_slow_ramp_time: "{{ csvfile.list.0.PoolSlowRampTime }}"
+    pool_lb_method: "{{ csvfile.list.0.PoolLBMethod }}"
+    state: present
+    activation: enabled
+{% endif %}

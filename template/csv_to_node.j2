@@ -1,0 +1,12 @@
+{% for item in csv_extract.split("\n") %}
+{%   if loop.index != 1 %}
+{%     set list = item.split(",") %}
+
+  - name: "{{ list[8]|trim() }}"
+    node_ip: "{{ list[9]|trim() }}"
+    node_port: "{{ list[10]|trim() }}"
+    node_pool_membership: "{{ list[3]|trim() }}"
+    state: present
+    activation: enabled
+{%   endif %}
+{% endfor %}

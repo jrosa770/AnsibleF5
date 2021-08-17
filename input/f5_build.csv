@@ -1,0 +1,3 @@
+VIP_Name,VIP_IP,VIP_Port,VIP_Pool,PoolMonitors,PoolMonitorsType,PoolSlowRampTime,PoolLBMethod,PoolNodes,Node_IP,Node_Port
+lab-vip-10.1.1.12,10.1.1.12,443,lab-pool-Web-02,/Common/http,and_list,120,ratio-member,mytestserver112,10.1.2.112,443
+lab-vip-10.1.1.12,10.1.1.12,443,lab-pool-Web-02,/Common/http,and_list,120,ratio-member,mytestserver113,10.1.2.113,443

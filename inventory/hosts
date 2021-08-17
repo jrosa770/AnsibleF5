@@ -1,0 +1,12 @@
+[all:vars]
+ansible_python_interpreter=/usr/bin/python3
+ansible_connection = local
+
+[f5:children]
+f5_prod
+f5_dev
+
+[f5_dev]
+lab-f5 ansible_host=10.100.1.10
+
+[f5_prod]
